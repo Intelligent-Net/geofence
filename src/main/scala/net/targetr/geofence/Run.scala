@@ -71,7 +71,7 @@ object Run {
         src => src.getLines
                   .filter(str => str(0).isDigit)
                   .map(_.split(","))
-                  .map(c => ((c(TargetRServer.fields(0)).trim.toFloat, c(TargetRServer.fields(1)).trim.toFloat, DateParse.string2Second(c(TargetRServer.fields(2)).trim))))
+                  .map(c => ((c(TargetRServer.fields._1).trim.toFloat, c(TargetRServer.fields._2).trim.toFloat, DateParse.string2Second(c(TargetRServer.fields._3).trim))))
                   .toArray
                   .sorted(Ordering.by[(Float,Float,Int), Int](_._3))
                   .map(c => { Bffi.set(kv, idx, i, c._1, c._2, c._3); i += 1 })
