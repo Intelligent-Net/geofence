@@ -1,0 +1,206 @@
+package net.targetr.geofence
+
+import akka.actor.{ Actor, ActorLogging, Props }
+import scala.util.{Try, Success, Failure}
+import java.nio.ByteBuffer
+import java.io.RandomAccessFile
+
+final case class SampleSize(size: Double)
+final case class SubSampleSize(sample: Double)
+final case class SetSubSampleSize(areaId: String, sample: Double)
+
+final case class DataItem(dataItem: (Float, Float, Int))
+final case class Data(data: List[DataItem])
+final case class TestRange(areaId: String, itemId: String, start: Int, end: Int, duration: Int)
+final case class TestRangeSample(areaId: String, itemId: String, start: Int, end: Int, duration: Int, sample: Double)
+final case class TestGeoRange(areaId: String, itemId: String, condition: String, start: Int, end: Int, duration: Int)
+final case class TestGeoRangeSample(areaId: String, itemId: String, condition: String, start: Int, end: Int, duration: Int, sample: Double)
+final case class TestSlot(areaId: String, itemId: String, slot: String)
+final case class TestSlotSample(areaId: String, itemId: String, slot: String, sample: Double)
+final case class TestGeoSlot(areaId: String, itemId: String, condition: String, slot: String)
+final case class TestGeoSlotSample(areaId: String, itemId: String, condition: String, slot: String, sample: Double)
+final case class Test(areaId: String, itemId: String)
+final case class TestSample(areaId: String, itemId: String, sample: Double)
+final case class TestGeo(areaId: String, itemId: String, condition: String)
+final case class TestGeoSample(areaId: String, itemId: String, condition: String, sample: Double)
+
+final case class PointsFound(found: Int, total: Int, success: Boolean = true, message: String = "OK")
+final case class Uploaded(total: Int, success: Boolean, filename: String)
+
+object GeoRegistryActor {
+  final case class LoadPolyFile(file: String, name: String)
+
+  final case class RunTestRange(geo: TestRange)
+  final case class RunTestRangeSample(geo: TestRangeSample)
+  final case class RunTestGeoRange(geo: TestGeoRange)
+  final case class RunTestGeoRangeSample(geo: TestGeoRangeSample)
+
+  final case class RunTestSlot(geo: TestSlot)
+  final case class RunTestSlotSample(geo: TestSlotSample)
+  final case class RunTestGeoSlot(geo: TestGeoSlot)
+  final case class RunTestGeoSlotSample(geo: TestGeoSlotSample)
+
+  final case class RunTest(geo: Test)
+  final case class RunTestSample(geo: TestSample)
+  final case class RunTestGeo(geo: TestGeo)
+  final case class RunTestGeoSample(geo: TestGeoSample)
+
+  final case object GetSampleSize
+  final case class GetSubSampleSize(id: String)
+  final case class GetData(id: String)
+
+  def props: Props = Props[GeoRegistryActor]
+
+  private var sampleSize = 1.0
+  private val db = new LRUCache[String, DataBase](8)
+
+  def getStem(i: String) =
+    i.split("\\.")(0).split("[\\\\/]").reverse(0)
+
+  def getDb(i: String) =
+    db.get(getStem(i))
+
+  def removeDb(i: String) =
+    db.remove(getStem(i))
+}
+
+case class DataBase(idx: Array[Long],
+                    data: ByteBuffer,
+                    raf: RandomAccessFile,
+                    size: Int,
+                    var subSampleSize: Double = 1.0)
+
+class GeoRegistryActor extends Actor with ActorLogging {
+  import GeoRegistryActor._
+
+  private def testShapeSlot(id: String, sample: Double, condition: String = "", slot: String = "00:00:00,23:59:59,0") = {
+    def default(v: String, d: String) =
+      if (v.isEmpty) d else v
+
+    var start = 0
+    var end = 24 * 60 * 60 - 1
+    var duration = 0
+
+    Try {
+      val range = (slot + ",,0").split("\\s*,\\s*")
+
+      start = DateParse.time2Second(default(range(0), "00:00:00"))
+      end = DateParse.time2Second(default(range(1), "23:59:59"))
+      duration = default(range(2), "0").toInt
+    } match {
+      case Success(v) => 
+        testShape(id, sample, condition, start, end, duration)
+      case Failure(e) =>
+        sender() ! PointsFound(0, 0, false, e.toString)
+    }
+  }
+
+  private def testShape(id: String, sample: Double, condition: String = "", startSec: Int = 0, endSec: Int = 24 * 60 * 60 - 1, duration: Int = 0) = {
+    def testResponse(found: Int, total: Int) = {
+      if (total == 0)
+        sender() ! PointsFound(found, total, false, "No Data Loaded")
+      else if (found == 0)
+        sender() ! PointsFound(found, total, true, "No points found")
+      else
+        sender() ! PointsFound(found, total)
+    }
+
+    Try {
+      val i = db.get(id)
+
+      if (i != null)
+      {
+        val localSample = if (sample == 0.0) i.subSampleSize else sample
+
+        if (condition == "")
+          Run.runTest(i.size, i.data, i.idx, localSample, startSec, endSec, duration)
+        else if (condition.contains("gpsInsideCircle"))
+          Run.runCircleTest(i.size, i.data, i.idx, condition, localSample, startSec, endSec, duration)
+        else 
+          Run.runPolygonTest(i.size, i.data, i.idx, condition, localSample, startSec, endSec, duration)
+      }
+      else
+        throw new NullPointerException(s"$id data not loaded")
+    } match {
+      case Success(v) => 
+        testResponse(v._1, v._2)
+      case Failure(e) =>
+        sender() ! PointsFound(0, 0, false, e.toString)
+    }
+  }
+
+  private def uploading(name: String, file: String, sampleSize: Double, compressed: Boolean) = {
+    Try(Run.loadData(name, file, sampleSize, compressed)) match {
+      case Success(v) => 
+        db.put(getStem(name), DataBase(size = v._1, data = v._2, raf = v._3, idx = v._4))
+
+        new java.io.File(file).delete
+        sender() ! Uploaded(v._1, true, name)
+      case Failure(e) =>
+        sender() ! Uploaded(0, false, e.toString)
+    }
+  }
+
+  def receive: Receive = {
+    case SampleSize(sampleSizePara) =>
+      sampleSize = sampleSizePara
+      sender() ! SampleSize(sampleSizePara)
+    case GetSampleSize =>
+      sender() ! SampleSize(sampleSize)
+    case SetSubSampleSize(id, subSampleSizePara) =>
+      val i = db.get(id)
+      if (i != null) {
+        i.subSampleSize = subSampleSizePara
+        sender() ! SetSubSampleSize(id, subSampleSizePara)
+      }
+      else
+        sender() ! SetSubSampleSize(id, 0.0)
+    case GetSubSampleSize(id) =>
+      val i = db.get(id)
+      if (i != null) {
+        sender() ! SetSubSampleSize(id, i.subSampleSize)
+      }
+      else
+        sender() ! SetSubSampleSize(id, 0.0)
+    //case GetData =>
+    //  sender() ! Data(data.toList.map(i => DataItem(i._1,i._2,i._3)))
+    case LoadPolyFile(file, name) =>
+      val ext = name.substring(name.lastIndexOf(".") + 1)
+
+      if (ext == "csv") {
+        uploading(name, file, sampleSize, false)
+      }
+      else if (ext == "gz" && name.endsWith(".csv.gz")) {
+        uploading(name, file, sampleSize, true)
+      }
+      else {
+        println("Unknown file upload requested : " + ext)
+        sender() ! Uploaded(0, false, name)
+      }
+    case RunTestGeoRangeSample(s) =>
+      testShape(s.areaId, s.sample, s.condition, s.start, s.end, s.duration)
+    case RunTestGeoRange(s) =>
+      testShape(s.areaId, 0.0, s.condition, s.start, s.end, s.duration)
+    case RunTestRangeSample(s) =>
+      testShape(s.areaId, s.sample, "", s.start, s.end, s.duration)
+    case RunTestRange(s) =>
+      testShape(s.areaId, 0.0, "", s.start, s.end, s.duration)
+    case RunTestGeoSlotSample(s) =>
+      testShapeSlot(s.areaId, s.sample, s.condition, s.slot)
+    case RunTestGeoSlot(s) =>
+      testShapeSlot(s.areaId, 0.0, s.condition, s.slot)
+    case RunTestSlotSample(s) =>
+      testShapeSlot(s.areaId, s.sample, "", s.slot)
+    case RunTestSlot(s) =>
+      testShapeSlot(s.areaId, 0.0, "", s.slot)
+    case RunTestGeoSample(s) =>
+      testShape(s.areaId, s.sample, s.condition)
+    case RunTestGeo(s) =>
+      testShape(s.areaId, 0.0, s.condition)
+    case RunTestSample(s) =>
+      testShape(s.areaId, s.sample)
+    case RunTest(s) =>
+      testShape(s.areaId, 0.0)
+    case e => sender() ! Uploaded(0, false, e.toString)
+  }
+}
