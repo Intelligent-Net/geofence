@@ -7,31 +7,8 @@ import java.nio.ByteBuffer
 import java.io.RandomAccessFile
 
 object Run {
-  /*
-  def main(args: Array[String]): Unit = {
-    if (args.length <= 2) {
-      println("Parameters are : <period csv> <polygon definition> [<sample size>] [<iterations for stability>]")
-      System.exit(1)
-    }
-    val data = args(0)
-    if (! new java.io.File(data).isFile) {
-      println(s"File does not exist: $data")
-      System.exit(1)
-    }
-    val polygons = args(1)
-    if (! new java.io.File(polygons).isFile) {
-      println(s"File does not exist: $polygons")
-      System.exit(1)
-    }
-    val sampleSize = if (args.length > 2) args(2).toDouble else 0.01
-    val iterations = if (args.length > 3) args(3).toInt else 10
-
-    runPolygon(data, polygons, sampleSize, iterations)
-  }
-  */
-
   def loadData(name: String, data: String, sampleSize: Double = 0.01, comp: Boolean = false): (Int, ByteBuffer, RandomAccessFile, Array[Long]) = {
-    val size = Json.using(io.Source.fromInputStream(
+    val size = using(io.Source.fromInputStream(
                if (comp)
                  new java.util.zip.GZIPInputStream(new java.io.FileInputStream(data))
                else
@@ -62,7 +39,7 @@ object Run {
     val kv = ByteBuffer.allocateDirect(size * Bffi.entrySize)
 
     var i = 0
-    Json.using(io.Source.fromInputStream(
+    using(io.Source.fromInputStream(
                if (comp)
                  new java.util.zip.GZIPInputStream(new java.io.FileInputStream(data))
                else
@@ -84,12 +61,8 @@ object Run {
     (size, kv, raf, idx)
   }
 
-  def loadPolyJson(polygons: String): String = {
-    Json.readFile(polygons)
-  }
-
   def runCircleTest(size: Int, kv: ByteBuffer, idx: Array[Long], circle: String, subSample: Double = 1.0, startSec: Int = 0, endSec: Int = 24 * 60 * 60, duration: Int = 1): (Int, Int) = {
-    val c = Json.getCircle(circle)
+    val c = getCircle(circle)
 
     runCircleInstance(size, kv, idx, (c._1, c._2), c._3, c._4, subSample, startSec, endSec, duration)
   }
@@ -99,7 +72,7 @@ object Run {
   }
 
   def runPolygonTest(size: Int, kv: ByteBuffer, idx: Array[Long], polygon: String, subSample: Double = 1.0, startSec: Int = 0, endSec: Int = 24 * 60 * 60, duration: Int = 1): (Int, Int) = {
-    runPolygonInstance(size, kv, idx, Json.getCoords(polygon).toArray, subSample, startSec, endSec, duration)
+    runPolygonInstance(size, kv, idx, getCoords(polygon).toArray, subSample, startSec, endSec, duration)
   }
 
   def runPolygonInstance(size: Int, kv: ByteBuffer, idx: Array[Long], polygon: Array[(Double,Double)], subSample: Double = 1.0, startSec: Int = 0, endSec: Int = 24 * 60 * 60, duration: Int = 1): (Int, Int) = {
@@ -146,6 +119,29 @@ object Run {
       (cnt, n)
     }
   }
+
+  def getCircle(cond: String): (Double, Double, Double, String) = {
+    val circle = "\"([^\"]*)\"".r
+    val parts = circle.findAllIn(cond).toList(0).replaceAll("\"", "").split("\\s*,\\s*")
+
+    (parts(0).toDouble, parts(1).toDouble, parts(2).toDouble, parts(3))
+  }
+
+  def getCoords(cond: String): Seq[(Double, Double)] = {
+    val polys = "\"([^\"]*)\"".r
+    val arr = polys.findAllIn(cond).flatMap(_.replaceAll("\"","").split("\\s*,\\s*").map(_.toDouble)).toArray
+
+    for (j <- 0 to arr.length if (j % 2 == 1))
+      yield((arr(j-1),arr(j)))
+  }
+
+  def using[A <: { def close(): Unit }, B](param: A)(f: A => B): B =
+    try {
+      f(param)
+    }
+    finally {
+      param.close()
+    }
 
   def time[R](block: => R): Long = {
     val t0 = System.currentTimeMillis()

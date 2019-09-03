@@ -9,8 +9,6 @@ final case class SampleSize(size: Double)
 final case class SubSampleSize(sample: Double)
 final case class SetSubSampleSize(areaId: String, sample: Double)
 
-final case class DataItem(dataItem: (Float, Float, Int))
-final case class Data(data: List[DataItem])
 final case class TestRange(areaId: String, itemId: String, start: Int, end: Int, duration: Int)
 final case class TestRangeSample(areaId: String, itemId: String, start: Int, end: Int, duration: Int, sample: Double)
 final case class TestGeoRange(areaId: String, itemId: String, condition: String, start: Int, end: Int, duration: Int)
@@ -47,12 +45,12 @@ object GeoRegistryActor {
 
   final case object GetSampleSize
   final case class GetSubSampleSize(id: String)
-  final case class GetData(id: String)
 
   def props: Props = Props[GeoRegistryActor]
 
-  private var sampleSize = 1.0
-  private val db = new LRUCache[String, DataBase](8)
+  // State Data
+  private var sampleSize = 1.0 // Does not change at present
+  private val db = new LRUCache[String, DataBase](8) // small for now
 
   def getStem(i: String) =
     i.split("\\.")(0).split("[\\\\/]").reverse(0)
@@ -162,8 +160,6 @@ class GeoRegistryActor extends Actor with ActorLogging {
       }
       else
         sender() ! SetSubSampleSize(id, 0.0)
-    //case GetData =>
-    //  sender() ! Data(data.toList.map(i => DataItem(i._1,i._2,i._3)))
     case LoadPolyFile(file, name) =>
       val ext = name.substring(name.lastIndexOf(".") + 1)
 

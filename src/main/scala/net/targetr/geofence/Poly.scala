@@ -1,57 +1,6 @@
 package net.targetr.geofence
 
 object Poly {
-  /*
-  def points(ps: Array[Array[Double]]): Array[(Double, Double)] = {
-    val ar = for (nested <- ps) yield(for (j <- 0 to nested.length if (j % 2 == 1)) yield((nested(j-1),nested(j)))).toArray
-
-    ar(0)
-  }
-  */
-
-  // Given three points p, q, r, check if point q lies on line segment pr
-  private def onSegment(p: (Double, Double), q: (Double, Double), r: (Double, Double)): Boolean = {
-    q._1 <= Math.max(p._1, r._1) &&
-    q._1 >= Math.min(p._1, r._1) &&
-    q._2 <= Math.max(p._2, r._2) &&
-    q._2 >= Math.min(p._2, r._2)
-  }
-
-  // To find orientation of ordered triplet (p, q, r).
-  // Returns
-  // 0 --> p, q and r are colinear
-  // 1 --> Clockwise
-  // 2 --> Anticlockwise
-  private def orientation(p: (Double, Double), q: (Double, Double), r: (Double, Double)): Int  = {
-    val v = (q._2 - p._2) * (r._1 - q._1) - (q._1 - p._1) * (r._2 - q._2)
-
-    if (v == 0) 0  // colinear
-    else if (v > 0) 1
-    else 2
-  }
-
-  // The function that returns true if line segment 'p1q1'
-  // and 'p2q2' intersect.
-  private def doIntersect(p1: (Double, Double), q1: (Double, Double), p2: (Double, Double), q2: (Double, Double)): Boolean = {
-    // Find the four orientations
-    val o1 = orientation(p1, q1, p2)
-    val o2 = orientation(p1, q1, q2)
-    val o3 = orientation(p2, q2, p1)
-    val o4 = orientation(p2, q2, q1)
-
-    // General case
-    if (o1 != o2 && o3 != o4)
-      true
-    else {
-      // Special Cases
-      // p1, q1 and p2 are colinear and p2 lies on segment p1q1
-      (o1 == 0 && onSegment(p1, p2, q1)) ||
-      (o2 == 0 && onSegment(p1, q2, q1)) ||
-      (o3 == 0 && onSegment(p2, p1, q2)) ||
-      (o4 == 0 && onSegment(p2, q1, q2))
-    }
-  }
-
   def boundingSquare(polygon: Array[(Double, Double)]): Double = {
     val (minx,miny) = polygon.map(p => (p._1, p._2)).min
     val (maxx,maxy) = polygon.map(p => (p._1, p._2)).max
@@ -112,6 +61,49 @@ object Poly {
 
     // Return true if count is odd, false otherwise
     count % 2 == 1
+  }
+
+  // The function that returns true if line segment 'p1q1'
+  // and 'p2q2' intersect.
+  private def doIntersect(p1: (Double, Double), q1: (Double, Double), p2: (Double, Double), q2: (Double, Double)): Boolean = {
+    // Find the four orientations
+    val o1 = orientation(p1, q1, p2)
+    val o2 = orientation(p1, q1, q2)
+    val o3 = orientation(p2, q2, p1)
+    val o4 = orientation(p2, q2, q1)
+
+    // General case
+    if (o1 != o2 && o3 != o4)
+      true
+    else {
+      // Special Cases
+      // p1, q1 and p2 are colinear and p2 lies on segment p1q1
+      (o1 == 0 && onSegment(p1, p2, q1)) ||
+      (o2 == 0 && onSegment(p1, q2, q1)) ||
+      (o3 == 0 && onSegment(p2, p1, q2)) ||
+      (o4 == 0 && onSegment(p2, q1, q2))
+    }
+  }
+
+  // Given three points p, q, r, check if point q lies on line segment pr
+  private def onSegment(p: (Double, Double), q: (Double, Double), r: (Double, Double)): Boolean = {
+    q._1 <= Math.max(p._1, r._1) &&
+    q._1 >= Math.min(p._1, r._1) &&
+    q._2 <= Math.max(p._2, r._2) &&
+    q._2 >= Math.min(p._2, r._2)
+  }
+
+  // To find orientation of ordered triplet (p, q, r).
+  // Returns
+  // 0 --> p, q and r are colinear
+  // 1 --> Clockwise
+  // 2 --> Anticlockwise
+  private def orientation(p: (Double, Double), q: (Double, Double), r: (Double, Double)): Int  = {
+    val v = (q._2 - p._2) * (r._1 - q._1) - (q._1 - p._1) * (r._2 - q._2)
+
+    if (v == 0) 0  // colinear
+    else if (v > 0) 1
+    else 2
   }
 //}
 
