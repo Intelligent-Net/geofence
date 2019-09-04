@@ -1,10 +1,7 @@
 package net.targetr.geofence
 
-import scala.collection.mutable.ArrayBuffer
-import scala.util.{Try, Success, Failure}
-import scala.util.Random
-import java.nio.ByteBuffer
 import java.io.RandomAccessFile
+import java.nio.ByteBuffer
 
 object Run {
   def loadData(name: String, data: String, sampleSize: Double = 0.01, comp: Boolean = false): (Int, ByteBuffer, RandomAccessFile, Array[Long]) = {
@@ -27,7 +24,7 @@ object Run {
       //dbInstance.kv = null
       GeoRegistryActor.removeDb(name)
 
-      java.lang.System.gc
+      java.lang.System.gc()
     }
 
     val idx = Array.fill[Long](24 * 60 + 1)(-1)
@@ -48,7 +45,7 @@ object Run {
         src => src.getLines
                   .filter(str => str(0).isDigit)
                   .map(_.split(","))
-                  .map(c => ((c(TargetRServer.fields._1).trim.toFloat, c(TargetRServer.fields._2).trim.toFloat, DateParse.string2Second(c(TargetRServer.fields._3).trim))))
+                  .map(c => (c(TargetRServer.fields._1).trim.toFloat, c(TargetRServer.fields._2).trim.toFloat, DateParse.string2Second(c(TargetRServer.fields._3).trim)))
                   .toArray
                   .sorted(Ordering.by[(Float,Float,Int), Int](_._3))
                   .map(c => { Bffi.set(kv, idx, i, c._1, c._2, c._3); i += 1 })
@@ -85,7 +82,7 @@ object Run {
   }
 
   def runInstance(size: Int, kv: ByteBuffer, idx: Array[Long], subSample: Double = 1.0, startSec: Int = 0, endSec: Int = 24 * 60 * 60, duration: Int = 1): (Int, Int) = {
-    runShape(size, kv, idx, (p : (Double, Double)) => true, subSample, startSec, endSec, duration)
+    runShape(size, kv, idx, (_: (Double, Double)) => true, subSample, startSec, endSec, duration)
   }
 
   def runShape(size: Int, kv: ByteBuffer, idx: Array[Long], contains: ((Double, Double)) => Boolean, subSample: Double = 1.0, startSec: Int = 0, endSec: Int = 24 * 60 * 60 - 1, duration: Int = 1): (Int, Int) = {
@@ -122,7 +119,7 @@ object Run {
 
   def getCircle(cond: String): (Double, Double, Double, String) = {
     val circle = "\"([^\"]*)\"".r
-    val parts = circle.findAllIn(cond).toList(0).replaceAll("\"", "").split("\\s*,\\s*")
+    val parts = circle.findAllIn(cond).toList.head.replaceAll("\"", "").split("\\s*,\\s*")
 
     (parts(0).toDouble, parts(1).toDouble, parts(2).toDouble, parts(3))
   }
@@ -131,8 +128,8 @@ object Run {
     val polys = "\"([^\"]*)\"".r
     val arr = polys.findAllIn(cond).flatMap(_.replaceAll("\"","").split("\\s*,\\s*").map(_.toDouble)).toArray
 
-    for (j <- 0 to arr.length if (j % 2 == 1))
-      yield((arr(j-1),arr(j)))
+    for (j <- 0 to arr.length if j % 2 == 1)
+      yield (arr(j-1),arr(j))
   }
 
   def using[A <: { def close(): Unit }, B](param: A)(f: A => B): B =

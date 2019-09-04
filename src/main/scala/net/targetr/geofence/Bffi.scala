@@ -1,15 +1,11 @@
 package net.targetr.geofence
 
-import java.util._
-import java.io._
 import java.nio.ByteBuffer
-import java.nio.MappedByteBuffer
-import java.nio.channels.FileChannel
 
 // Float Float Int
 object Bffi
 {
-  val entrySize = 4 + 4 + 4
+  val entrySize: Int = 4 + 4 + 4
 
   def set(kv: ByteBuffer, idx: Array[Long], i: Int, lat: Float, lon: Float, ts: Int): Int = {
     val pos = i * entrySize

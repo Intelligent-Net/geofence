@@ -52,13 +52,13 @@ object GeoRegistryActor {
   private var sampleSize = 1.0 // Does not change at present
   private val db = new LRUCache[String, DataBase](8) // small for now
 
-  def getStem(i: String) =
+  def getStem(i: String): String =
     i.split("\\.")(0).split("[\\\\/]").reverse(0)
 
-  def getDb(i: String) =
+  def getDb(i: String): DataBase =
     db.get(getStem(i))
 
-  def removeDb(i: String) =
+  def removeDb(i: String): DataBase =
     db.remove(getStem(i))
 }
 
@@ -71,7 +71,7 @@ case class DataBase(idx: Array[Long],
 class GeoRegistryActor extends Actor with ActorLogging {
   import GeoRegistryActor._
 
-  private def testShapeSlot(id: String, sample: Double, condition: String = "", slot: String = "00:00:00,23:59:59,0") = {
+  private def testShapeSlot(id: String, sample: Double, condition: String = "", slot: String = "00:00:00,23:59:59,0"): Unit = {
     def default(v: String, d: String) =
       if (v.isEmpty) d else v
 
@@ -86,19 +86,19 @@ class GeoRegistryActor extends Actor with ActorLogging {
       end = DateParse.time2Second(default(range(1), "23:59:59"))
       duration = default(range(2), "0").toInt
     } match {
-      case Success(v) => 
+      case Success(_) =>
         testShape(id, sample, condition, start, end, duration)
       case Failure(e) =>
-        sender() ! PointsFound(0, 0, false, e.toString)
+        sender() ! PointsFound(0, 0, success = false, e.toString)
     }
   }
 
-  private def testShape(id: String, sample: Double, condition: String = "", startSec: Int = 0, endSec: Int = 24 * 60 * 60 - 1, duration: Int = 0) = {
-    def testResponse(found: Int, total: Int) = {
+  private def testShape(id: String, sample: Double, condition: String = "", startSec: Int = 0, endSec: Int = 24 * 60 * 60 - 1, duration: Int = 0): Unit = {
+    def testResponse(found: Int, total: Int): Unit = {
       if (total == 0)
-        sender() ! PointsFound(found, total, false, "No Data Loaded")
+        sender() ! PointsFound(found, total, success = false, "No Data Loaded")
       else if (found == 0)
-        sender() ! PointsFound(found, total, true, "No points found")
+        sender() ! PointsFound(found, total, success = true, "No points found")
       else
         sender() ! PointsFound(found, total)
     }
@@ -123,19 +123,19 @@ class GeoRegistryActor extends Actor with ActorLogging {
       case Success(v) => 
         testResponse(v._1, v._2)
       case Failure(e) =>
-        sender() ! PointsFound(0, 0, false, e.toString)
+        sender() ! PointsFound(0, 0, success = false, e.toString)
     }
   }
 
-  private def uploading(name: String, file: String, sampleSize: Double, compressed: Boolean) = {
+  private def uploading(name: String, file: String, sampleSize: Double, compressed: Boolean): Unit = {
     Try(Run.loadData(name, file, sampleSize, compressed)) match {
       case Success(v) => 
         db.put(getStem(name), DataBase(size = v._1, data = v._2, raf = v._3, idx = v._4))
 
         new java.io.File(file).delete
-        sender() ! Uploaded(v._1, true, name)
+        sender() ! Uploaded(v._1, success = true, name)
       case Failure(e) =>
-        sender() ! Uploaded(0, false, e.toString)
+        sender() ! Uploaded(0, success = false, e.toString)
     }
   }
 
@@ -164,14 +164,14 @@ class GeoRegistryActor extends Actor with ActorLogging {
       val ext = name.substring(name.lastIndexOf(".") + 1)
 
       if (ext == "csv") {
-        uploading(name, file, sampleSize, false)
+        uploading(name, file, sampleSize, compressed = false)
       }
       else if (ext == "gz" && name.endsWith(".csv.gz")) {
-        uploading(name, file, sampleSize, true)
+        uploading(name, file, sampleSize, compressed = true)
       }
       else {
         println("Unknown file upload requested : " + ext)
-        sender() ! Uploaded(0, false, name)
+        sender() ! Uploaded(0, success = false, name)
       }
     case RunTestGeoRangeSample(s) =>
       testShape(s.areaId, s.sample, s.condition, s.start, s.end, s.duration)
@@ -197,6 +197,6 @@ class GeoRegistryActor extends Actor with ActorLogging {
       testShape(s.areaId, s.sample)
     case RunTest(s) =>
       testShape(s.areaId, 0.0)
-    case e => sender() ! Uploaded(0, false, e.toString)
+    case e => sender() ! Uploaded(0, success = false, e.toString)
   }
 }

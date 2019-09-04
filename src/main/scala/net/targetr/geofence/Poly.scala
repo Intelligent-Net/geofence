@@ -12,7 +12,7 @@ object Poly {
     var area = 0.0
     var j = polygon.length - 1
 
-    for (i <- 0 until polygon.length) {
+    for (i <- polygon.indices) {
       area += (polygon(j)._1 + polygon(i)._1) * (polygon(j)._2 - polygon(i)._2)
       //area += polygon(i)._1 * polygon(j)._2 - polygon(i)._2 * polygon(j)._1
       j = i
@@ -38,10 +38,10 @@ object Poly {
 
     // Count intersections of the above line with sides of polygon
     var count = 0
-    var i = 0;
+    var i = 0
 
     do {
-      val next = (i + 1) % n;
+      val next = (i + 1) % n
 
       // Check if the line segment from 'p' to 'ref(Double, Double)' intersects
       // with the line segment from 'polygon[i]' to 'polygon[next]'
@@ -50,12 +50,12 @@ object Poly {
         // then check if it lies on segment. If it does, return true,
         // otherwise false
         if (orientation(polygon(i), p, polygon(next)) == 0)
-           return onSegment(polygon(i), p, polygon(next));
+           return onSegment(polygon(i), p, polygon(next))
 
-        count += 1;
+        count += 1
       }
 
-      i = next;
+      i = next
     }
     while (i != 0)
 

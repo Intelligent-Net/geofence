@@ -1,13 +1,13 @@
 package net.targetr.geofence
 
-import scala.concurrent.{ Await, ExecutionContext, Future }
-import scala.concurrent.duration.Duration
-import scala.util.{ Failure, Success }
-
-import akka.actor.{ ActorRef, ActorSystem }
+import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.Route
 import akka.stream.ActorMaterializer
+
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.util.{Failure, Success}
 
 object TargetRServer extends App with GeoRoutes {
   val host = if (args.length >= 1) args(0) else "localhost"
@@ -26,8 +26,6 @@ object TargetRServer extends App with GeoRoutes {
   // from the GeoRoutes trait
   lazy val routes: Route = geoRoutes
 
-  //val serverBinding: Future[Http.ServerBinding] = Http().bindAndHandle(routes, "localhost", 8080)
-  //val serverBinding: Future[Http.ServerBinding] = Http().bindAndHandle(routes, "ML1", 8080)
   val serverBinding: Future[Http.ServerBinding] = Http().bindAndHandle(routes, host, port)
 
   serverBinding.onComplete {
@@ -36,7 +34,7 @@ object TargetRServer extends App with GeoRoutes {
     case Failure(e) =>
       Console.err.println(s"Server could not start!")
       e.printStackTrace()
-      system.terminate()
+      system.terminate
   }
 
   Await.result(system.whenTerminated, Duration.Inf)

@@ -1,24 +1,22 @@
 package net.targetr.geofence
 
-import akka.actor.{ ActorRef, ActorSystem }
+import java.io.File
+
+import akka.actor.{ActorRef, ActorSystem}
 import akka.event.Logging
-
-import scala.concurrent.duration._
-import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.server.{Route, ExceptionHandler}
-import akka.http.scaladsl.server.directives.MethodDirectives.get
-import akka.http.scaladsl.server.directives.MethodDirectives.post
-import akka.http.scaladsl.server.directives.RouteDirectives.complete
+import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server.directives.FileInfo
+import akka.http.scaladsl.server.directives.MethodDirectives.{get, post}
 import akka.http.scaladsl.server.directives.PathDirectives.path
-
-import scala.concurrent.Future
-import net.targetr.geofence.GeoRegistryActor._
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.util.{Success, Failure}
+import akka.http.scaladsl.server.directives.RouteDirectives.complete
+import akka.http.scaladsl.server.{ExceptionHandler, Route}
 import akka.pattern.ask
 import akka.util.Timeout
-import akka.http.scaladsl.server.directives.OnSuccessMagnet
+import net.targetr.geofence.GeoRegistryActor._
+
+import scala.concurrent.Future
+import scala.concurrent.duration._
 
 trait GeoRoutes extends JsonSupport {
   // we leave these abstract, since they will be provided by the App
@@ -30,11 +28,11 @@ trait GeoRoutes extends JsonSupport {
   def geoRegistryActor: ActorRef
 
   // Required by the `ask` (?) method below
-  implicit lazy val timeout = Timeout(10.minutes) // usually we'd obtain the timeout from the system's configuration
+  implicit lazy val timeout: Timeout = Timeout(10.minutes) // usually we'd obtain the timeout from the system's configuration
 
   private def runner[T](future: Future[PointsFound], areaId: String, itemId: String) = {
     onSuccess(future) { exec =>
-      log.info(s"areaId: ${areaId}, itemId: ${itemId} - found: ${exec.found}, total: ${exec.total}, success: ${exec.success}, message: ${exec.message}")
+      log.info(s"areaId: $areaId, itemId: $itemId - found: ${exec.found}, total: ${exec.total}, success: ${exec.success}, message: ${exec.message}")
       complete(exec)
     }
   }
@@ -142,7 +140,10 @@ trait GeoRoutes extends JsonSupport {
       withRequestTimeout(5.minutes) {
         log.info("Starting upload")
 
-        uploadedFile("file") {
+        def dest(fileInfo: FileInfo): File =
+          File.createTempFile(fileInfo.fileName, ".tmp")
+
+        storeUploadedFile("file", dest) {
           case (metadata, file) =>
             log.info(s"Starting processing ${metadata.fileName}")
 
