@@ -27,5 +27,6 @@ trait JsonSupport extends SprayJsonSupport {
   implicit val sampleJsonFormat: RootJsonFormat[SubSampleSize] = jsonFormat1(SubSampleSize)
   implicit val setSampleJsonFormat: RootJsonFormat[SetSubSampleSize] = jsonFormat2(SetSubSampleSize)
   implicit val uploadJsonFormat: RootJsonFormat[Uploaded] = jsonFormat3(Uploaded)
+  implicit val opensonFormat: RootJsonFormat[Opened] = jsonFormat3(Opened)
   implicit val pointsJsonFormat: RootJsonFormat[PointsFound] = jsonFormat4(PointsFound)
 }

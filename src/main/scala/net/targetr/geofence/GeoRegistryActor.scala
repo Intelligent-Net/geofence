@@ -24,9 +24,11 @@ final case class TestGeoSample(areaId: String, itemId: String, condition: String
 
 final case class PointsFound(found: Int, total: Int, success: Boolean = true, message: String = "OK")
 final case class Uploaded(total: Int, success: Boolean, filename: String)
+final case class Opened(total: Int, success: Boolean, filename: String)
 
 object GeoRegistryActor {
   final case class LoadPolyFile(file: String, name: String)
+  final case class OpenPolyFile(name: String)
 
   final case class RunTestRange(geo: TestRange)
   final case class RunTestRangeSample(geo: TestRangeSample)
@@ -139,6 +141,17 @@ class GeoRegistryActor extends Actor with ActorLogging {
     }
   }
 
+  private def opening(name: String): Unit = {
+    Try(Run.openData(name)) match {
+      case Success(v) => 
+        db.put(getStem(name), DataBase(size = v._1, data = v._2, raf = v._3, idx = v._4))
+
+        sender() ! Opened(v._1, success = true, name)
+      case Failure(e) =>
+        sender() ! Opened(0, success = false, e.toString)
+    }
+  }
+
   def receive: Receive = {
     case SampleSize(sampleSizePara) =>
       sampleSize = sampleSizePara
@@ -173,6 +186,8 @@ class GeoRegistryActor extends Actor with ActorLogging {
         println("Unknown file upload requested : " + ext)
         sender() ! Uploaded(0, success = false, name)
       }
+    case OpenPolyFile(name) =>
+      opening(name)
     case RunTestGeoRangeSample(s) =>
       testShape(s.areaId, s.sample, s.condition, s.start, s.end, s.duration)
     case RunTestGeoRange(s) =>

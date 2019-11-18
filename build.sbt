@@ -1,6 +1,6 @@
-scalaVersion := "2.12.9"
-lazy val akkaHttpVersion = "10.1.9"
-lazy val akkaVersion    = "2.6.0-M5"
+scalaVersion := "2.13.1"
+lazy val akkaHttpVersion = "10.1.10"
+lazy val akkaVersion    = "2.6.0"
 
 name := "geofence"
 

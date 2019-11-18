@@ -134,8 +134,15 @@ trait GeoRoutes extends JsonSupport {
         get { _.complete((geoRegistryActor ? GetSampleSize).mapTo[SampleSize]) }
       },
       path("sample" / Remaining) { id =>
-        log.info("Checking sample size for $id")
+        log.info(s"Checking sample size for $id")
         get { _.complete((geoRegistryActor ? GetSubSampleSize(id)).mapTo[SetSubSampleSize]) }
+      },
+      path("open" / Remaining) { id =>
+        val openFn: Future[Opened] = (geoRegistryActor ? OpenPolyFile(id)).mapTo[Opened]
+        onSuccess(openFn) { exec =>
+          log.info(s"Opened file $id")
+          complete(exec)
+        }
       },
       withRequestTimeout(5.minutes) {
         log.info("Starting upload")

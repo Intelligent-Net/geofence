@@ -4,6 +4,25 @@ import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 
 object Run {
+  def openData(name: String): (Int, ByteBuffer, RandomAccessFile, Array[Long]) = {
+    val idx = Array.fill[Long](24 * 60 + 1)(-1)
+    val stem = GeoRegistryActor.getStem(name)
+    val raf = new RandomAccessFile("/tmp/" + stem + ".mmf", "rw")
+    val size = (raf.length / Bffi.entrySize).toInt
+    val kv = raf.getChannel().map(java.nio.channels.FileChannel.MapMode.READ_WRITE, 0, raf.length)
+
+    for (pos <- 0 until size by Bffi.entrySize) {
+      val ix = kv.getInt(pos + 4 + 4) / 60
+
+      if (idx(ix) == -1)
+        idx(ix) = pos / Bffi.entrySize
+    }
+
+    idx(24 * 60) = size
+
+    (size, kv, raf, idx)
+  }
+
   def loadData(name: String, data: String, sampleSize: Double = 0.01, comp: Boolean = false): (Int, ByteBuffer, RandomAccessFile, Array[Long]) = {
     val size = using(io.Source.fromInputStream(
                if (comp)
@@ -19,21 +38,18 @@ object Run {
     val dbInstance = GeoRegistryActor.getDb(name)
 
     if (dbInstance != null) {
-      //dbInstance.idx = null
-      //dbInstance.raf = null
-      //dbInstance.kv = null
       GeoRegistryActor.removeDb(name)
 
       java.lang.System.gc()
     }
 
     val idx = Array.fill[Long](24 * 60 + 1)(-1)
-    //val stem = GeoRegistryActor.getStem(name)
-    //val raf = new RandomAccessFile("/tmp/" + stem + ".mmf", "rw")
-    //val kv = raf.getChannel().map(java.nio.channels.FileChannel.MapMode.READ_WRITE, 0, size * Bffi.entrySize)
+    val stem = GeoRegistryActor.getStem(name)
+    val raf = new RandomAccessFile("/tmp/" + stem + ".mmf", "rw")
+    val kv = raf.getChannel().map(java.nio.channels.FileChannel.MapMode.READ_WRITE, 0, size * Bffi.entrySize)
     //val kv = ByteBuffer.allocate(size * Bffi.entrySize)
-    val raf = null
-    val kv = ByteBuffer.allocateDirect(size * Bffi.entrySize)
+    //val raf = null
+    //val kv = ByteBuffer.allocateDirect(size * Bffi.entrySize)
 
     var i = 0
     using(io.Source.fromInputStream(
@@ -100,7 +116,7 @@ object Run {
       var n = 0
 
   //val t = time {
-      for (i <- lb until ub by mod) {
+      for (i <- Range.BigDecimal(lb, ub, mod).map(_.toDouble)) {
         val p = Bffi.get(kv, i.toInt)
 
         if (timeRange(p._3)) {
