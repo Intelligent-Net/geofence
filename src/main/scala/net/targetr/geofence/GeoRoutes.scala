@@ -48,7 +48,7 @@ trait GeoRoutes extends JsonSupport {
     pathPrefix("geofence") {
     concat(
       pathEndOrSingleSlash {
-        withRequestTimeout(1.minutes) {
+        withRequestTimeout(5.minutes) {
           concat(
             post {    // Order is important, must be before TestGeo
               entity(as[TestGeoRangeSample]) { geo =>
@@ -144,8 +144,8 @@ trait GeoRoutes extends JsonSupport {
           complete(exec)
         }
       },
-      withRequestTimeout(5.minutes) {
-        log.info("Starting upload")
+      withRequestTimeout(10.minutes) {
+        log.info("Starting data upload")
 
         def dest(fileInfo: FileInfo): File =
           File.createTempFile(fileInfo.fileName, ".tmp")
