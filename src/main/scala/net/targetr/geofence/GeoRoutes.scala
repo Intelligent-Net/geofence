@@ -111,16 +111,16 @@ trait GeoRoutes extends JsonSupport {
               }
             },
             post {
-              entity(as[SampleSize]) { sample =>
-                val sSize: Future[SampleSize] = (geoRegistryActor ? SampleSize(sample.size)).mapTo[SampleSize]
+              entity(as[Sample]) { sample =>
+                val sSize: Future[Sample] = (geoRegistryActor ? Sample(sample.size)).mapTo[Sample]
                 onSuccess(sSize) { size =>
                   complete((StatusCodes.Created, size))
                 }
               }
             },
             post {
-              entity(as[SetSubSampleSize]) { sample =>
-                val sSize: Future[SetSubSampleSize] = (geoRegistryActor ? SetSubSampleSize(sample.areaId, sample.sample)).mapTo[SetSubSampleSize]
+              entity(as[SetSubSample]) { sample =>
+                val sSize: Future[SetSubSample] = (geoRegistryActor ? SetSubSample(sample.areaId, sample.sample)).mapTo[SetSubSample]
                 onSuccess(sSize) { sample =>
                   complete((StatusCodes.Created, sample))
                 }
@@ -130,12 +130,12 @@ trait GeoRoutes extends JsonSupport {
           }
       },
       path("size") {
-        log.info("Checking size")
-        get { _.complete((geoRegistryActor ? GetSampleSize).mapTo[SampleSize]) }
+        log.info("Checking sample size")
+        get { _.complete((geoRegistryActor ? GetSample).mapTo[Sample]) }
       },
       path("sample" / Remaining) { id =>
-        log.info(s"Checking sample size for $id")
-        get { _.complete((geoRegistryActor ? GetSubSampleSize(id)).mapTo[SetSubSampleSize]) }
+        log.info(s"Checking subsample size for $id")
+        get { _.complete((geoRegistryActor ? SubSample(id)).mapTo[SetSubSample]) }
       },
       path("open" / Remaining) { id =>
         val openFn: Future[Opened] = (geoRegistryActor ? OpenPolyFile(id)).mapTo[Opened]

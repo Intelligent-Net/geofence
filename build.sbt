@@ -8,8 +8,10 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-http"            % akkaHttpVersion,
   "com.typesafe.akka" %% "akka-http-spray-json" % akkaHttpVersion,
   "com.typesafe.akka" %% "akka-stream"          % akkaVersion,
-  "com.softwaremill.sttp.client" %% "core" % "2.0.0-RC2",
-//  "com.softwaremill.sttp.client" %% "json4s" % "2.0.0-RC2",
+  "com.softwaremill.sttp.client" %% "core" % "2.0.0-RC3",
+  "com.softwaremill.sttp.client" %% "akka-http-backend" % "2.0.0-RC3",
+  "com.softwaremill.sttp.client" %% "json4s" % "2.0.0-RC3",
+  "org.json4s" %% "json4s-native" % "3.6.7",
 
   "com.typesafe.akka" %% "akka-http-testkit"    % akkaHttpVersion % Test,
   "com.typesafe.akka" %% "akka-testkit"         % akkaVersion     % Test,

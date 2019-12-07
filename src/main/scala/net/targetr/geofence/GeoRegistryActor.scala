@@ -5,9 +5,10 @@ import scala.util.{Try, Success, Failure}
 import java.nio.ByteBuffer
 import java.io.RandomAccessFile
 
-final case class SampleSize(size: Double)
-final case class SubSampleSize(sample: Double)
-final case class SetSubSampleSize(areaId: String, sample: Double)
+final case class Sample(size: Double)
+final case class SetSample(size: Double)
+final case class SubSample(areaId: String)
+final case class SetSubSample(areaId: String, sample: Double)
 
 final case class TestRange(areaId: String, itemId: String, start: Int, end: Int, duration: Int)
 final case class TestRangeSample(areaId: String, itemId: String, start: Int, end: Int, duration: Int, sample: Double)
@@ -45,17 +46,21 @@ object GeoRegistryActor {
   final case class RunTestGeo(geo: TestGeo)
   final case class RunTestGeoSample(geo: TestGeoSample)
 
-  final case object GetSampleSize
-  final case class GetSubSampleSize(id: String)
+  final case object GetSample
+  final case class GetSubSample(id: String)
 
   def props: Props = Props[GeoRegistryActor]
 
   // State Data
-  private var sampleSize = 1.0 // Does not change at present
+  private var sample = 1.0 // Does not change at present
   private val db = new LRUCache[String, DataBase](8) // small for now
 
   def getStem(i: String): String =
     i.split("\\.")(0).split("[\\\\/]").reverse(0)
+
+  def getFn(name: String) = {
+    "/tmp/" + getStem(name) + ".mmf"
+  }
 
   def getDb(i: String): DataBase =
     db.get(getStem(i))
@@ -68,7 +73,7 @@ case class DataBase(idx: Array[Long],
                     data: ByteBuffer,
                     raf: RandomAccessFile,
                     size: Int,
-                    var subSampleSize: Double = 1.0)
+                    var subSample: Double = 1.0)
 
 class GeoRegistryActor extends Actor with ActorLogging {
   import GeoRegistryActor._
@@ -110,7 +115,7 @@ class GeoRegistryActor extends Actor with ActorLogging {
 
       if (i != null)
       {
-        val localSample = if (sample == 0.0) i.subSampleSize else sample
+        val localSample = if (sample == 0.0) i.subSample else sample
 
         if (condition == "")
           Run.runTest(i.size, i.data, i.idx, localSample, startSec, endSec, duration)
@@ -129,8 +134,21 @@ class GeoRegistryActor extends Actor with ActorLogging {
     }
   }
 
-  private def uploading(name: String, file: String, sampleSize: Double, compressed: Boolean): Unit = {
-    Try(Run.loadData(name, file, sampleSize, compressed)) match {
+  private def uploading(name: String, file: String, sample: Double, compressed: Boolean): Unit = {
+    Try(Run.loadData(name, file, sample, compressed)) match {
+      case Success(v) => 
+        db.put(getStem(name), DataBase(size = v._1, data = v._2, raf = v._3, idx = v._4))
+
+        new java.io.File(file).delete
+        sender() ! Uploaded(v._1, success = true, name)
+      case Failure(e) =>
+        sender() ! Uploaded(0, success = false, e.toString)
+    }
+  }
+
+  private def uploadMMF(name: String, file: String, compressed: Boolean): Unit = {
+    //Try(Run.loadData(name, file, sample, compressed)) match {
+    Try(Run.openData(name)) match {
       case Success(v) => 
         db.put(getStem(name), DataBase(size = v._1, data = v._2, raf = v._3, idx = v._4))
 
@@ -153,34 +171,39 @@ class GeoRegistryActor extends Actor with ActorLogging {
   }
 
   def receive: Receive = {
-    case SampleSize(sampleSizePara) =>
-      sampleSize = sampleSizePara
-      sender() ! SampleSize(sampleSizePara)
-    case GetSampleSize =>
-      sender() ! SampleSize(sampleSize)
-    case SetSubSampleSize(id, subSampleSizePara) =>
+    case Sample(samplePara) =>
+      sample = samplePara
+      sender() ! Sample(samplePara)
+    case GetSample =>
+      sender() ! Sample(sample)
+    case SetSubSample(id, subSamplePara) =>
       val i = db.get(id)
       if (i != null) {
-        i.subSampleSize = subSampleSizePara
-        sender() ! SetSubSampleSize(id, subSampleSizePara)
+        i.subSample = subSamplePara
+        sender() ! SetSubSample(id, subSamplePara)
       }
       else
-        sender() ! SetSubSampleSize(id, 0.0)
-    case GetSubSampleSize(id) =>
+        sender() ! SetSubSample(id, 0.0)
+    case SubSample(id) =>
       val i = db.get(id)
       if (i != null) {
-        sender() ! SetSubSampleSize(id, i.subSampleSize)
+        sender() ! SetSubSample(id, i.subSample)
       }
       else
-        sender() ! SetSubSampleSize(id, 0.0)
+        sender() ! SetSubSample(id, 0.0)
     case LoadPolyFile(file, name) =>
       val ext = name.substring(name.lastIndexOf(".") + 1)
 
       if (ext == "csv") {
-        uploading(name, file, sampleSize, compressed = false)
+        uploading(name, file, sample, compressed = false)
       }
       else if (ext == "gz" && name.endsWith(".csv.gz")) {
-        uploading(name, file, sampleSize, compressed = true)
+        uploading(name, file, sample, compressed = true)
+      }
+      else if (name.endsWith(".mmf")) {
+        new java.io.File(file).renameTo(new java.io.File(getFn(name)))
+        println("File uploaded requested : " + name)
+        sender() ! Uploaded(0, success = true, name)
       }
       else {
         println("Unknown file upload requested : " + ext)
