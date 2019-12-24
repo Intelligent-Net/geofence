@@ -85,6 +85,7 @@ class GeoRegistryActor extends Actor with ActorLogging {
     var start = 0
     var end = 24 * 60 * 60 - 1
     var duration = 0
+    val DateParse = new DateParse()
 
     Try {
       val range = (slot + ",,0").split("\\s*,\\s*")

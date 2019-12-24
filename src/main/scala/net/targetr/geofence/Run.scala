@@ -3,6 +3,9 @@ package net.targetr.geofence
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 
+//import scala.util.parsing.json._
+import scala.util.matching.Regex._
+
 object Run {
   def openData(name: String): (Int, ByteBuffer, RandomAccessFile, Array[Long]) = {
     val idx = Array.fill[Long](24 * 60 + 1)(-1)
@@ -24,6 +27,7 @@ object Run {
   }
 
   def loadData(name: String, data: String, sampleSize: Double = 0.01, comp: Boolean = false): (Int, ByteBuffer, RandomAccessFile, Array[Long]) = {
+    val DateParse = new DateParse()
     val size = using(io.Source.fromInputStream(
                if (comp)
                  new java.util.zip.GZIPInputStream(new java.io.FileInputStream(data))
@@ -71,6 +75,201 @@ object Run {
     idx(24 * 60) = size
     //in.close
     (size, kv, raf, idx)
+  }
+
+  def rnd(n: String, p: Double = 100000.0) =
+    math.round(n.toDouble * p) / p
+
+  def hourlyData(data: String) = {
+    val dh = DayHour()
+
+    using(io.Source.fromInputStream(
+               if (data.endsWith(".gz"))
+                 new java.util.zip.GZIPInputStream(new java.io.FileInputStream(data))
+               else
+                 new java.io.FileInputStream(data))
+               ) {
+        src => src.getLines
+                  .drop(1)
+                  .map(_.split(","))
+                  //.map(c => (c(TargetRServer.fields._1).trim.toFloat, c(TargetRServer.fields._2).trim.toFloat, dh.how(c(TargetRServer.fields._3).trim)))
+                  .map(c => (rnd(c(1).trim), rnd(c(2).trim), dh.how(c(0).trim), 1))
+                  .toArray
+                  .groupMapReduce(a => (a._3, a._1, a._2))(a => a)((x, y) => (y._1, y._2, y._3, x._4 + y._4))
+                  .values
+      }
+  }
+
+  def iotData(data: String, cd: Int = 3302, v: String = "5500", f: (Any,String) => Any = (m: Any, v: String) => m.asInstanceOf[Map[String,Any]](v)) = {
+    import org.json4s.JsonDSL._
+    import org.json4s._
+    import org.json4s.native.JsonMethods._
+    import scala.util.hashing.MurmurHash3
+    implicit val formats = DefaultFormats
+    val dev = """"(?>..-){7}.."""".r
+    val code = """"ipso":(\{.+?\}\})""".r
+    val tim = """\$date":"([^"]+)"""".r
+    val DateParse = new DateParse("yyyy-MM-dd'T'HH:mm:ss zzz")
+    def re(l: String) = {
+      val device =
+        MurmurHash3.stringHash(
+        dev.findFirstMatchIn(l) match {
+          //case Some(data: Match) => data.group(1) + data.group(3) + data.group(2)
+          case Some(data: Match) => data.group(0)
+          case None => ""
+        })
+      val ipso =
+        code.findFirstMatchIn(l) match {
+          case Some(data: Match) => data.group(1)
+          case None => ""
+        }
+      val time =
+        tim.findFirstMatchIn(l) match {
+          case Some(data: Match) => data.group(1)
+          case None => ""
+        }
+
+      val m = parse(ipso).extract[Map[Int, Any]]
+
+      //(device, m.map(_.asInstanceOf[Map[Int,Boolean]]), DateParse.secondEpoch(time.substring(0,19)))
+      //(device, m(cd).asInstanceOf[Map[Int,Any]](5500).asInstanceOf[Boolean], DateParse.secondEpoch(time.substring(0,19)))
+      //(device, m(cd).asInstanceOf[Map[String,Any]].filter(_._1 == "5500"), DateParse.secondEpoch(time.substring(0,19)))
+      //def find(m: Any): Boolean =
+      //  m.asInstanceOf[Map[String,Any]](v).asInstanceOf[Boolean]
+      //(device, m(cd).asInstanceOf[Map[String,Any]]("5500").asInstanceOf[Boolean], DateParse.secondEpoch(time.substring(0,19)))
+      //(device, find(m(cd), "5500"), DateParse.secondEpoch(time.substring(0,19)))
+      (device, f(m(cd), v), DateParse.secondEpoch(time.substring(0,19)))
+    }
+
+    using(io.Source.fromInputStream(
+               if (data.endsWith(".gz"))
+                 new java.util.zip.GZIPInputStream(new java.io.FileInputStream(data))
+               else
+                 new java.io.FileInputStream(data))
+               ) {
+        src => src.getLines
+                  .map(re(_))
+                  .toArray
+                  .filter(_._1 != 0)
+                  .groupMap(_._1)(v => (v._3, v._2))
+                  .map(kv => kv._1 -> kv._2.sortBy(_._1))
+      }
+  }
+
+  def busData(data: String) = {
+    val lat = """lat":([^,}]+),""".r
+    val lon = """lng":([^,}]+),""".r
+    val tim = """.ime":"([^,}]+)",""".r
+    //val dev = """"(?>device_id|id)":([^,}]+),""".r
+    //val dev = """"device_id":([^,}]+),""".r
+    //val dev = """"((?>..-){7}(?>..))"""".r
+    //val dev = """"((?>..){4}-(?>..){4})"""".r
+    val dev = """"(..)((?>-..){3})((?>-..){4})"""".r
+    val DateParse = new DateParse("yyyy-MM-dd'T'HH:mm:ss zzz")
+    def re(l: String) = {
+      val device =
+        dev.findFirstMatchIn(l) match {
+          case Some(data: Match) => data.group(1) + data.group(3) + data.group(2)
+          case None => ""
+        }
+      val latitude =
+        lat.findFirstMatchIn(l) match {
+          case Some(data: Match) => data.group(1)
+          case None => ""
+        }
+      val longitude =
+        lon.findFirstMatchIn(l) match {
+          case Some(data: Match) => data.group(1)
+          case None => ""
+        }
+      val time =
+        tim.findFirstMatchIn(l) match {
+          case Some(data: Match) => data.group(1)
+          case None => ""
+        }
+      (device, latitude.toDouble, longitude.toDouble, DateParse.secondEpoch(time.substring(0,19)))
+    }
+
+    using(io.Source.fromInputStream(
+               if (data.endsWith(".gz"))
+                 new java.util.zip.GZIPInputStream(new java.io.FileInputStream(data))
+               else
+                 new java.io.FileInputStream(data))
+               ) {
+        src => src.getLines
+                  .map(re(_))
+                  .toArray
+                  .filter(_._1 != "")
+                  .groupMap(_._1)(v => (v._2, v._3, v._4))
+                  .map(kv => kv._1 -> kv._2.groupMapReduce(r => (r._1, r._2))(a => a)((a, v) => (v._1, v._2, math.min(a._3, v._3)))
+                                           .values
+                                           .toArray
+                                           .sortBy(_._3)
+                                           //.sliding(2)
+                                           //.filter(_.length > 1)
+                                           //.map(a => velocity(a(0), a(1)))
+                                           //.sliding(2)
+                                           //.map(a => acceleration(a(0), a(1)))
+                                           .toArray)
+                  //.toArray
+      }
+  }
+
+  private def velocity(l: (Double, Double, Long), r: (Double, Double, Long)) = {
+    val dist = Circle.haversineDist(l._1, l._2, r._1, r._2)
+    val latD = Circle.haversineDist(l._1, l._2, r._1, l._2)
+    val lonD = Circle.haversineDist(l._1, l._2, l._1, r._2)
+    val secs = l._3
+    val dSecs = r._3 - secs
+    //val dSecs = if (r._3 - secs == 0) 1 else r._3 - secs
+    val vel = dist / dSecs
+    val latV = latD / dSecs
+    val lonV = lonD / dSecs
+
+    (l._1, l._2, dist, latD, lonD, secs, dSecs, vel, latV, lonV)
+  }
+
+  private def acceleration(l: (Double, Double, Double, Double, Double, Long, Long, Double, Double, Double), r: (Double, Double, Double, Double, Double, Long, Long, Double, Double, Double)) = {
+    val acc = r._8 - l._8
+    val latA = r._9 - l._9
+    val lonA = r._10 - l._10
+
+    (l._1, l._2, l._3, l._4, l._5, l._6, l._7, l._8, l._9, l._10, acc, latA, lonA)
+  }
+
+  def eventData(data: String) = {
+    val DateParse = new DateParse()
+    def grouping(id: String, lat: String, lon: String, t: String) = {
+      //(id, rnd(lat), rnd(lon), DateParse.secondEpoch(t))
+      (id, lat.toDouble, lon.toDouble, DateParse.secondEpoch(t))
+    }
+
+    using(io.Source.fromInputStream(
+               if (data.endsWith(".gz"))
+                 new java.util.zip.GZIPInputStream(new java.io.FileInputStream(data))
+               else
+                 new java.io.FileInputStream(data))
+               ) {
+        src => src.getLines
+                  .drop(1)
+                  .map(_.split(","))
+                  .map(c => grouping(c(8).trim, c(10).trim, c(11).trim, c(0).trim))
+                  .toArray
+                  .groupMap(_._1)(v => (v._2, v._3, v._4))
+                  .map(kv => kv._1 -> kv._2.groupMapReduce(r => (r._1, r._2))(a => a)((a, v) => (v._1, v._2, math.min(a._3, v._3)))
+                                           .values
+                                           .toArray
+                                           .sortBy(_._3)
+                                           .sliding(2)
+                                           .filter(_.length > 1)
+                                           .map(a => velocity(a(0), a(1)))
+                                           //.map(a => if (a.length == 1) velocity(a(0), a(0)) else velocity(a(0), a(1)))
+                                           .sliding(2)
+                                           //.map(a => if (a.length == 1) acceleration(a(0), a(0)) else acceleration(a(0), a(1)))
+                                           .map(a => acceleration(a(0), a(1)))
+                                           .toArray)
+                  //.toArray
+      }
   }
 
   def runCircleTest(size: Int, kv: ByteBuffer, idx: Array[Long], circle: String, subSample: Double = 1.0, startSec: Int = 0, endSec: Int = 24 * 60 * 60, duration: Int = 1): (Int, Int) = {
